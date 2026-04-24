@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
 import { Coin } from '../entities/Coin';
+import { loadSave, saveSave } from '../utils/SaveData';
 
 export class GameScene extends Scene {
     private player!: Player;
@@ -15,6 +16,7 @@ export class GameScene extends Scene {
     private isPaused: boolean = false;
     private pauseMenu!: Phaser.GameObjects.Container;
     private escKey!: Phaser.Input.Keyboard.Key;
+    private saveData: any;
 
     constructor() {
         super('GameScene');
@@ -53,8 +55,13 @@ export class GameScene extends Scene {
         this.isPaused = false;
         this.score = 0;
 
-        // Jogador
-        this.player = new Player(this, 400, 500);
+        this.saveData = loadSave();
+        const extraHealth = this.saveData.healthUpgradeLevel || 0;
+        const totalHealth = 3 + extraHealth; // cada nível dá +1 vida
+        const magnetLvl = this.saveData.magnetLevel || 0;
+
+        // Cria o jogador com a vida total
+        this.player = new Player(this, 400, 500, totalHealth, magnetLvl);
         this.player.setName('player');
         console.log('✅ Player criado');
 
@@ -134,11 +141,36 @@ export class GameScene extends Scene {
         if (this.gameOver || this.isPaused) return;
         this.player.update();
 
+        // Debug do raio do magnetismo (remova depois de testar)
+        /*if (this.player && this.player.active) {
+            // Desenha círculo (cria uma única vez ou atualiza)
+            if (!this.debugCircle) {
+                this.debugCircle = this.add.circle(this.player.x, this.player.y, this.player.magnetRadius, 0xff00ff, 0.3);
+            } else {
+                this.debugCircle.setPosition(this.player.x, this.player.y);
+                this.debugCircle.setRadius(this.player.magnetRadius);
+            }
+            console.log(`Raio magnetismo: ${this.player.magnetRadius}`);
+        }*/
+        
+        // Magnetismo: puxa moedas
+        this.coins.getChildren().forEach((coin: any) => {
+            if (!coin.active) return;
+            const dx = this.player.x - coin.x;
+            const dy = this.player.y - coin.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < this.player.magnetRadius && dist > 5) {
+                const angle = Math.atan2(dy, dx);
+                const pullForce = 350;
+                coin.setVelocity(Math.cos(angle) * pullForce, Math.sin(angle) * pullForce);
+            }
+        });
+
         // Limpeza de objetos fora da tela
-        this.enemies.getChildren().forEach(obj => { if ((obj as any).y > 650) obj.destroy(); });
-        this.coins.getChildren().forEach(obj => { if ((obj as any).y > 650) obj.destroy(); });
-        this.enemyBullets.getChildren().forEach(obj => { if ((obj as any).y > 650 || (obj as any).y < -50) obj.destroy(); });
-        this.player.bullets.getChildren().forEach(b => { if ((b as any).y < -50) b.destroy(); });
+        this.enemies.getChildren().forEach((obj: any) => { if (obj.y > 650) obj.destroy(); });
+        this.coins.getChildren().forEach((obj: any) => { if (obj.y > 650) obj.destroy(); });
+        this.enemyBullets.getChildren().forEach((obj: any) => { if (obj.y > 650 || obj.y < -50) obj.destroy(); });
+        this.player.bullets.getChildren().forEach((b: any) => { if (b.y < -50) b.destroy(); });
     }
 
     private spawnEnemy() {
@@ -191,8 +223,14 @@ export class GameScene extends Scene {
     private endGame() {
         this.gameOver = true;
         this.physics.pause();
+        
+        // Adiciona pontuação à carteira global
+        this.saveData.totalPoints += this.score;
+        saveSave(this.saveData);
+
         this.add.text(400, 280, 'GAME OVER', { fontSize: '56px', color: '#f00' }).setOrigin(0.5);
-        const restartText = this.add.text(400, 380, 'Clique para reiniciar', { fontSize: '28px', color: '#fff' }).setOrigin(0.5).setInteractive();
+        const msg = this.add.text(400, 350, `Pontos nesta rodada: ${this.score}\nTotal acumulado: ${this.saveData.totalPoints}`, { fontSize: '24px', color: '#fff', align: 'center' }).setOrigin(0.5);
+        const restartText = this.add.text(400, 460, 'Clique para reiniciar', { fontSize: '28px', color: '#fff' }).setOrigin(0.5).setInteractive();
         restartText.on('pointerdown', () => this.scene.restart());
     }
 }
