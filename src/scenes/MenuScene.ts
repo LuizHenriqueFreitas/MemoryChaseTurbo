@@ -381,19 +381,19 @@ export class MenuScene extends Scene {
         this.optionsModalContainer.add(line1);
         
         // Efeitos Sonoros
-        const sfxLabel = this.add.text(CONFIG.WIDTH / 2 - 150, CONFIG.HEIGHT / 2 - 70, '🔊 Efeitos Sonoros:', {
+        const sfxLabel = this.add.text(CONFIG.WIDTH / 2 - 220, CONFIG.HEIGHT / 2 - 70, '🔊 Efeitos Sonoros:', {
             fontSize: '20px',
             color: '#fff'
         }).setOrigin(0, 0.5);
         this.optionsModalContainer.add(sfxLabel);
-        
+
         const sfxMuted = this.audioManager.isSfxMutedState();
-        const sfxBtn = this.add.text(CONFIG.WIDTH / 2 + 100, CONFIG.HEIGHT / 2 - 70, sfxMuted ? 'DESLIGADO' : 'LIGADO', {
+        const sfxBtn = this.add.text(CONFIG.WIDTH / 2 + 220, CONFIG.HEIGHT / 2 - 70, sfxMuted ? 'DESLIGADO' : 'LIGADO', {
             fontSize: '20px',
             color: sfxMuted ? '#ff6666' : '#66ff66',
             backgroundColor: '#000',
             padding: { x: 15, y: 5 }
-        }).setOrigin(0.5).setInteractive();
+        }).setOrigin(1, 0.5).setInteractive();
         this.optionsModalContainer.add(sfxBtn);
         
         sfxBtn.on('pointerdown', () => {
@@ -407,19 +407,19 @@ export class MenuScene extends Scene {
         });
         
         // Música
-        const musicLabel = this.add.text(CONFIG.WIDTH / 2 - 150, CONFIG.HEIGHT / 2 - 10, '🎵 Música de Fundo:', {
+        const musicLabel = this.add.text(CONFIG.WIDTH / 2 - 220, CONFIG.HEIGHT / 2 - 10, '🎵 Música de Fundo:', {
             fontSize: '20px',
             color: '#fff'
         }).setOrigin(0, 0.5);
         this.optionsModalContainer.add(musicLabel);
-        
+
         const musicMuted = this.audioManager.isMusicMutedState();
-        const musicBtn = this.add.text(CONFIG.WIDTH / 2 + 100, CONFIG.HEIGHT / 2 - 10, musicMuted ? 'DESLIGADO' : 'LIGADO', {
+        const musicBtn = this.add.text(CONFIG.WIDTH / 2 + 220, CONFIG.HEIGHT / 2 - 10, musicMuted ? 'DESLIGADO' : 'LIGADO', {
             fontSize: '20px',
             color: musicMuted ? '#ff6666' : '#66ff66',
             backgroundColor: '#000',
             padding: { x: 15, y: 5 }
-        }).setOrigin(0.5).setInteractive();
+        }).setOrigin(1, 0.5).setInteractive();
         this.optionsModalContainer.add(musicBtn);
         
         musicBtn.on('pointerdown', () => {

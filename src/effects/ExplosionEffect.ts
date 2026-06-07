@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 
 export class ExplosionEffect {
-    public static create(scene: Scene, x: number, y: number, radius: number = 40, color: number = 0xff6600, ignoreWalls: boolean = true): void {
+    public static create(scene: Scene, x: number, y: number, radius: number = 40, color: number = 0xff6600): void {
         // Explosão principal
         const explosion = scene.add.circle(x, y, radius, color, 0.7);
         scene.tweens.add({
@@ -47,7 +47,7 @@ export class ExplosionEffect {
             });
         }
         
-        // Onda de choque que empurra objetos próximos (exceto paredes)
+        // Clarão central da explosão
         const shockwave = scene.add.circle(x, y, 5, 0xffffff, 0.5);
         scene.tweens.add({
             targets: shockwave,
@@ -59,7 +59,7 @@ export class ExplosionEffect {
         });
     }
     
-    public static createShockwave(scene: Scene, x: number, y: number, radius: number = 60, force: number = 300, ignoreWalls: boolean = true): void {
+    public static createShockwave(scene: Scene, x: number, y: number, radius: number = 60, force: number = 300): void {
         // Efeito visual da onda
         const wave = scene.add.circle(x, y, 10, 0x44aaff, 0.4);
         scene.tweens.add({

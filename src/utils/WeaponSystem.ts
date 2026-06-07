@@ -26,6 +26,10 @@ export class WeaponSystem {
                 if (bullet.body) bullet.body.setSize(12, 24);
                 bullet.rotation = Math.atan2(dirY, dirX);
                 bullet.setTint(0xffff00);
+
+                // Arma padrão: explode ao colidir com qualquer coisa
+                bullet.setData('explosive', true);
+                bullet.setData('explosionRadius', 35);
             }
         },
         {

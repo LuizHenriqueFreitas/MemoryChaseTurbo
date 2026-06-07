@@ -34,11 +34,9 @@ export class GameScene extends Scene {
     private timeWarpText!: Phaser.GameObjects.Text;
     private timeWarpBar!: Phaser.GameObjects.Rectangle;
     private timeWarpBarBg!: Phaser.GameObjects.Rectangle;
-    private bgm!: Phaser.Sound.BaseSound;
 
     private gameTimer: number = 0;  // tempo em segundos
     private timerText!: Phaser.GameObjects.Text;
-    private difficultyInterval!: Phaser.Time.TimerEvent;
     private baseSpawnDelay: number = 1200;
     private currentSpawnDelay: number = 1200;
     private spawnTimer!: Phaser.Time.TimerEvent;
@@ -48,28 +46,13 @@ export class GameScene extends Scene {
         super('GameScene');
     }
 
-    preload() {
-        console.log('🔧 Verificando texturas do BootScene:');
-        console.log('✓ player:', this.textures.exists('player'));
-        console.log('✓ enemy_walker:', this.textures.exists('enemy_walker'));
-        console.log('✓ enemy_shooter:', this.textures.exists('enemy_shooter'));
-        console.log('✓ enemy_chaser:', this.textures.exists('enemy_chaser'));
-        console.log('✓ coin:', this.textures.exists('coin'));
-        
-        if (!this.textures.exists('enemy_walker')) {
-            console.warn('⚠️ Textura enemy_walker não encontrada!');
-        }
-    }
-
     init() {
-        // 🔴 FORÇA A LIMPEZA DO TECLADO NA REINICIALIZAÇÃO
+        // Limpa o teclado ao (re)iniciar a cena
         if (this.input && this.input.keyboard) {
-            // Remove todos os keys listeners
             this.input.keyboard.removeAllListeners();
-            // Reseta o estado do teclado
             this.input.keyboard.resetKeys();
         }
-        
+
         // Reseta variáveis de estado
         this.gameOver = false;
         this.isPaused = false;
@@ -77,77 +60,64 @@ export class GameScene extends Scene {
     }
     
     create() {
+        // ========== FUNDO ==========
         if (this.textures.exists('background')) {
-            // Imagem real
             const bg = this.add.image(CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, 'background');
             bg.setDisplaySize(CONFIG.WIDTH, CONFIG.HEIGHT);
             bg.setAlpha(0.4);
-        
-            // Camada escura por cima para reduzir o brilho
             const darkOverlay = this.add.rectangle(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT, 0x000000, 0.3);
             darkOverlay.setOrigin(0);
         } else {
-            // Fallback colorido
             const bg = this.add.rectangle(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT, 0x0a0a2a);
             bg.setOrigin(0);
-            console.log('🎨 Usando fallback para fundo do GameScene');
-        }
-        // 🔴 IMPORTANTE: Limpar eventos anteriores do teclado
-        if (this.input && this.input.keyboard) {
-            this.input.keyboard.removeAllListeners();
-            this.input.keyboard.resetKeys();
         }
 
-        // Inicializa o gerenciador de áudio
+        // ========== INICIALIZAÇÕES ==========
         this.audioManager = new AudioManager(this);
-        
-        // Carrega dados do save
         this.saveData = loadSave();
+        
         const extraHealth = this.saveData.healthUpgradeLevel || 0;
         const totalHealth = 3 + extraHealth;
         const magnetLvl = this.saveData.magnetLevel || 0;
         const weaponLevel = this.saveData.weaponLevel || 0;
 
-        // Cria o player
+        // ========== PLAYER ==========
         this.player = new Player(this, 400, 500, totalHealth, magnetLvl, weaponLevel);
         this.player.setName('player');
-        console.log('✅ Player criado, teclado disponível:', !!this.input.keyboard);
-        
-        // Configura o mundo e as bordas
+
         this.physics.world.setBounds(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
         this.player.setCollideWorldBounds(true);
 
-        // Debug do magnetismo
-        this.setupMagnetDebug();
-
-        // Cria os grupos
+        // ========== GRUPOS ==========
         this.enemies = this.physics.add.group();
         this.coins = this.physics.add.group();
         this.shieldItems = this.physics.add.group();
         this.enemyBullets = this.physics.add.group();
         this.timeWarpItems = this.physics.add.group();
-        (this as any).enemyBullets = this.enemyBullets;
 
-        // Overlaps para coleta de itens
+        // ========== PAREDES LATERAIS (SÓLIDAS, INTRANSPONÍVEIS E INDESTRUTÍVEIS) ==========
+        this.createSideWalls();
+
+        // ========== OVERLAPS (COLETA DE ITENS) ==========
         this.physics.add.overlap(this.player, this.shieldItems, this.collectShield, undefined, this);
         this.physics.add.overlap(this.player, this.timeWarpItems, this.collectTimeWarp, undefined, this);
         this.physics.add.overlap(this.player, this.coins, (p, c) => this.collectCoin(p, c), undefined, this);
 
-        // UI do Escudo
+        // ========== UI DO ESCUDO ==========
         this.shieldTimeText = this.add.text(400, 30, '', { fontSize: '18px', color: '#44ccff' }).setOrigin(0.5).setVisible(false);
         this.shieldBarBg = this.add.rectangle(400, 55, 200, 12, 0x333333).setVisible(false);
         this.shieldBar = this.add.rectangle(400, 55, 200, 10, 0x44ccff).setVisible(false);
         
-        // UI do TimeWarp
+        // ========== UI DO TIMEWARP ==========
         this.timeWarpText = this.add.text(400, 85, '', { fontSize: '18px', color: '#ff44ff' }).setOrigin(0.5).setVisible(false);
         this.timeWarpBarBg = this.add.rectangle(400, 110, 200, 12, 0x333333).setVisible(false);
         this.timeWarpBar = this.add.rectangle(400, 110, 200, 10, 0xff44ff).setVisible(false);
 
-        // Textos de pontuação e vida
+        // ========== UI DE TEXTO ==========
         this.scoreText = this.add.text(16, 16, `Score: 0`, { fontSize: '28px', color: '#fff' });
         this.healthText = this.add.text(16, 50, `Vidas: ${this.player.health}`, { fontSize: '28px', color: '#fff' });
 
-        // Timer do jogo (canto superior direito)
+        // ========== TIMER DO JOGO ==========
         this.gameTimer = 0;
         this.timerText = this.add.text(780, 20, '00:00', {
             fontSize: '24px',
@@ -156,7 +126,6 @@ export class GameScene extends Scene {
             padding: { x: 10, y: 5 }
         }).setOrigin(1, 0);
         
-        // Timer que conta o tempo de jogo
         this.time.addEvent({
             delay: 1000,
             callback: () => this.updateGameTimer(),
@@ -164,15 +133,15 @@ export class GameScene extends Scene {
             loop: true
         });
         
-        // Timer que aumenta a dificuldade a cada minuto
-        this.difficultyInterval = this.time.addEvent({
+        // ========== DIFICULDADE ==========
+        this.time.addEvent({
             delay: 60000,
             callback: () => this.increaseDifficulty(),
             callbackScope: this,
             loop: true
         });
 
-        // Configura os timers de spawn
+        // ========== TIMERS DE SPAWN ==========
         this.currentSpawnDelay = this.baseSpawnDelay;
         this.spawnTimer = this.time.addEvent({
             delay: this.currentSpawnDelay,
@@ -201,53 +170,79 @@ export class GameScene extends Scene {
         // Colisão entre player e balas inimigas
         this.physics.add.collider(this.player, this.enemyBullets, (p, b) => this.playerHitByBullet(p, b), undefined, this);
 
-        // Evento para destruir objetos que encostam nas bordas do mundo
+        // ========== EVENTO DE BORDAS DO MUNDO ==========
         this.physics.world.on('worldbounds', (body: any) => {
             const obj = body.gameObject;
             if (obj && obj.active) {
-                // Destrói balas que encostam na borda
                 if (obj.texture?.key === 'bullet' || obj.texture?.key === 'enemyBullet') {
                     obj.destroy();
                 }
-                // Destrói inimigos que encostam na borda
                 if (obj instanceof Enemy) {
                     obj.destroy();
                 }
             }
         });
 
-        // Tecla ESC para pausa
+        // ========== TECLA ESC PARA PAUSA ==========
         if (this.input && this.input.keyboard) {
             this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         }
         
-        // Cria o menu de pausa
+        // ========== MENU DE PAUSA ==========
         this.createPauseMenu();
 
+        // ========== MÚSICA DE FUNDO ==========
         this.startBackgroundMusic();
     }
 
-    private setupMagnetDebug() {
-        let debugActive = false;
-        let debugCircle: Phaser.GameObjects.Arc | null = null;
-        
-        this.input.keyboard!.on('keydown-M', () => {
-            debugActive = !debugActive;
-            if (debugActive && !debugCircle && this.player.active) {
-                debugCircle = this.add.circle(this.player.x, this.player.y, this.player.magnetRadius, 0xffaa44, 0.2);
-                debugCircle.setStrokeStyle(2, 0xffaa44);
-            } else if (debugCircle) {
-                debugCircle.destroy();
-                debugCircle = null;
+    private createSideWalls() {
+        // Paredes laterais INVISÍVEIS, com a face interna exatamente no limite da janela
+        // (x = 0 e x = CONFIG.WIDTH). Sólidas, intransponíveis e indestrutíveis.
+        const thickness = 64; // espessa o bastante para nenhum corpo rápido atravessar
+
+        const makeWall = (centerX: number) => {
+            const wall = this.add.rectangle(centerX, CONFIG.HEIGHT / 2, thickness, CONFIG.HEIGHT);
+            wall.setVisible(false);
+            this.physics.add.existing(wall, true); // corpo estático (imóvel, indestrutível)
+            return wall;
+        };
+
+        const walls = [
+            makeWall(-thickness / 2),                // esquerda: face interna em x = 0
+            makeWall(CONFIG.WIDTH + thickness / 2)   // direita: face interna em x = CONFIG.WIDTH
+        ];
+
+        // Player não atravessa as paredes.
+        this.physics.add.collider(this.player, walls);
+
+        // Inimigos batem nas paredes; o Chaser explode ao se chocar com elas.
+        this.physics.add.collider(this.enemies, walls, (a, b) => {
+            const chaser = a instanceof ChaserEnemy ? a : (b instanceof ChaserEnemy ? b : null);
+            if (chaser && chaser.active) {
+                chaser.destroyOnCollision();
             }
-        });
-        
-        this.events.on('update', () => {
-            if (debugCircle && this.player.active) {
-                debugCircle.setPosition(this.player.x, this.player.y);
-                debugCircle.setRadius(this.player.magnetRadius);
-            }
-        });
+        }, undefined, this);
+
+        // Balas (do player e dos inimigos) colidem com as paredes: a BALA é destruída,
+        // nunca a parede. A ordem dos argumentos do callback não é garantida pelo Phaser
+        // quando o segundo alvo é um array, então identificamos a bala como "o que não é parede".
+        const onBulletHitsWall = (a: any, b: any) => {
+            const bullet = walls.includes(a) ? b : a;
+            if (!bullet || !bullet.active) return;
+            this.explodeBulletIfNeeded(bullet);
+            bullet.destroy();
+        };
+        this.physics.add.collider(this.player.bullets, walls, onBulletHitsWall, undefined, this);
+        this.physics.add.collider(this.enemyBullets, walls, onBulletHitsWall, undefined, this);
+    }
+
+    // Detona a explosão da bala (arma padrão) no ponto de impacto, se ela for explosiva.
+    private explodeBulletIfNeeded(bullet: any) {
+        if (!bullet.getData || !bullet.getData('explosive')) return;
+        const radius = bullet.getData('explosionRadius') || 35;
+        ExplosionEffect.create(this, bullet.x, bullet.y, radius, 0xffaa44);
+        ExplosionEffect.createShockwave(this, bullet.x, bullet.y, radius * 1.5, 250);
+        this.audioManager.playSfx('explosion', 0.5);
     }
 
     private createPauseMenu() {
@@ -410,7 +405,7 @@ export class GameScene extends Scene {
         });
 
         // Limpeza de objetos fora da tela
-        this.enemies.getChildren().forEach((obj: any) => { if (obj.y > 650) obj.destroy(); });
+        this.enemies.getChildren().forEach((obj: any) => { if (obj.y > 650 || obj.y < -100) obj.destroy(); });
         this.coins.getChildren().forEach((obj: any) => { if (obj.y > 650) obj.destroy(); });
         this.enemyBullets.getChildren().forEach((obj: any) => { if (obj.y > 650 || obj.y < -50) obj.destroy(); });
         this.player.bullets.getChildren().forEach((b: any) => { 
@@ -422,35 +417,17 @@ export class GameScene extends Scene {
 
     private spawnEnemy() {
         if (this.gameOver) return;
-        if (!this.enemies) {
-            console.error('❌ Grupo enemies não inicializado!');
-            return;
-        }
-        
+
         const x = Phaser.Math.Between(40, 760);
         const enemyType = Math.floor(Math.random() * 3);
-        
-        let enemy: Enemy | null = null;
-        
-        switch(enemyType) {
-            case 0:
-                enemy = new WalkerEnemy(this, x, -30);
-                console.log('⚪ Walker spawnado em x:', x);
-                break;
-            case 1:
-                enemy = new ShooterEnemy(this, x, -30);
-                console.log('🔴 Shooter spawnado em x:', x);
-                break;
-            case 2:
-                enemy = new ChaserEnemy(this, x, -30);
-                console.log('🟠 Chaser spawnado em x:', x);
-                break;
+
+        let enemy: Enemy;
+        switch (enemyType) {
+            case 0: enemy = new WalkerEnemy(this, x, -30); break;
+            case 1: enemy = new ShooterEnemy(this, x, -30); break;
+            default: enemy = new ChaserEnemy(this, x, -30); break;
         }
-        
-        if (enemy) {
-            this.enemies.add(enemy);
-            console.log('✅ Inimigo adicionado. Total:', this.enemies.getChildren().length);
-        }
+        this.enemies.add(enemy);
 
         this.trySpawnTimeWarpItem();
         this.trySpawnShieldItem();
@@ -476,8 +453,7 @@ export class GameScene extends Scene {
             const x = Phaser.Math.Between(60, 740);
             const shieldItem = new ShieldItem(this, x, -30);
             this.shieldItems.add(shieldItem);
-            console.log(`🛡️ Shield item spawnado! (Nível ${shieldLevel}, Chance: ${chance}%, Roll: ${roll.toFixed(1)}%)`);
-            
+
             // Efeito visual de spawn
             const spawnEffect = this.add.circle(x, -30, 15, 0x44ccff, 0.6);
             this.tweens.add({
@@ -501,11 +477,10 @@ export class GameScene extends Scene {
             const x = Phaser.Math.Between(60, 740);
             const item = new TimeWarpItem(this, x, -30);
             this.timeWarpItems.add(item);
-            console.log(`⏰ TimeWarp item spawnado! (Nível ${level})`);
         }
     }
 
-    private collectShield(player: any, item: any) {
+    private collectShield(_player: any, item: any) {
         item.destroy();
         
         const shieldLevel = this.saveData.shieldLevel || 0;
@@ -513,9 +488,7 @@ export class GameScene extends Scene {
         
         this.player.activateShield(duration);
         this.showFloatingScore(item.x, item.y, 0, '#44ccff');
-        
-        console.log(`🛡️ Escudo nível ${shieldLevel} coletado! Duração: ${duration}s`);
-        
+
         // Feedback visual da coleta
         const collectEffect = this.add.circle(item.x, item.y, 20, 0x44ccff, 0.6);
         this.tweens.add({
@@ -529,7 +502,7 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('powerup', 0.8);
     }
 
-    private collectTimeWarp(player: any, item: any) {
+    private collectTimeWarp(_player: any, item: any) {
         item.destroy();
         const level = this.saveData.timeWarpLevel || 0;
         const duration = getTimeWarpDuration(level);
@@ -549,9 +522,10 @@ export class GameScene extends Scene {
         const hitX = enemy.x;
         const hitY = enemy.y;
         
-        // Verifica se a bala é explosiva
+        // Verifica se a bala é explosiva (lê antes de destruir)
         const isExplosive = bullet.getData('explosive');
-        
+        const explosionRadius = bullet.getData('explosionRadius') || 35;
+
         // Remove a bala
         bullet.destroy();
         
@@ -570,7 +544,6 @@ export class GameScene extends Scene {
         
         // Bala explosiva causa explosão
         if (isExplosive) {
-            const explosionRadius = bullet.getData('explosionRadius') || 35;
             ExplosionEffect.create(this, hitX, hitY, explosionRadius, 0xffaa44);
             ExplosionEffect.createShockwave(this, hitX, hitY, explosionRadius * 1.5, 250);
         } else {
@@ -606,18 +579,21 @@ export class GameScene extends Scene {
             ExplosionEffect.create(this, enemy1.x, enemy1.y, 50, 0xff4400);
             ExplosionEffect.createShockwave(this, enemy1.x, enemy1.y, 80, 350);
             enemy1.destroyOnCollision();
+            this.audioManager.playSfx('explosion', 0.7);
             return;
         }
-        
+
         if (enemy2 instanceof ChaserEnemy) {
             ExplosionEffect.create(this, enemy2.x, enemy2.y, 50, 0xff4400);
             ExplosionEffect.createShockwave(this, enemy2.x, enemy2.y, 80, 350);
             enemy2.destroyOnCollision();
+            this.audioManager.playSfx('explosion', 0.7);
             return;
         }
-        
+
         // Para inimigos normais, pequena explosão e ricochete
         ExplosionEffect.create(this, impactX, impactY, 20, 0xffaa66);
+        this.audioManager.playSfx('explosion', 0.4);
         
         const dx = enemy1.x - enemy2.x;
         const dy = enemy1.y - enemy2.y;
@@ -637,7 +613,7 @@ export class GameScene extends Scene {
         }
     }
 
-    private collectCoin(player: any, coin: any) {
+    private collectCoin(_player: any, coin: any) {
         coin.destroy();
         const multiplier = this.player.getScoreMultiplier();
         const finalScore = 10 * multiplier;
@@ -667,14 +643,44 @@ export class GameScene extends Scene {
     }
 
     private playerHit(player: any, enemy: any) {
-        // 🔴 CHASER: explode ao colidir com o player
+        // CHASER: explode ao colidir com o player
         if (enemy instanceof ChaserEnemy) {
-            // ... código do Chaser (não mexe) ...
+            if (this.player.isInvincible || !this.player.active) return;
+
+            // Com escudo ativo: o chaser explode contra o escudo, mas o player não sofre dano.
+            if (this.player.hasShield) {
+                enemy.destroyOnCollision();
+                this.audioManager.playSfx('explosion', 0.8);
+                return;
+            }
+
+            // Dano + arremesso do player na direção contrária ao chaser
+            this.player.takeDamage();
+            this.healthText.setText(`Vidas: ${this.player.health}`);
+
+            if (this.player.active && this.player.body) {
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                const pushForce = 400;
+                this.player.setVelocity(Math.cos(angle) * pushForce, Math.sin(angle) * pushForce);
+
+                this.player.setTint(0xff8888);
+                this.time.delayedCall(300, () => {
+                    if (this.player && this.player.active) this.player.clearTint();
+                });
+            }
+
+            // Explode o chaser
+            enemy.destroyOnCollision();
+            this.audioManager.playSfx('explosion', 0.8);
+
+            if (this.player.health <= 0) {
+                this.endGame();
+            }
             return;
         }
-        
+
         // --- PARA INIMIGOS NORMAIS (Walker e Shooter) ---
-        
+
         if (this.player.isInvincible) return;
         if (enemy.markedForDeath) return;
         if (!this.player || !this.player.active || !this.player.body) return;
@@ -706,31 +712,20 @@ export class GameScene extends Scene {
             }
         }
         
-        // Marca o inimigo para morrer
+        // Marca o inimigo para morrer (mantém a aparência normal, sem escurecer/transparecer)
         enemy.markedForDeath = true;
-        
-        // Agenda destruição após 4 segundos com fade-out
+
+        // Agenda destruição após 4 segundos
         this.time.delayedCall(4000, () => {
             if (enemy && enemy.active) {
-                this.tweens.add({
-                    targets: enemy,
-                    alpha: 0,
-                    duration: 500,
-                    onComplete: () => enemy.destroy()
-                });
+                enemy.destroy();
             }
         });
         
-        // 🔴 REMOVA estas linhas - são para o inimigo, não para o player!
-        // if (enemy.active) {
-        //     enemy.setTint(0x888888);
-        //     enemy.setAlpha(0.5);
-        // }
-        
-        // ✅ Mantém apenas o efeito visual no PLAYER
+        // Efeito visual no player
         if (this.player.active) {
             this.player.setTint(0xff8888);
-            this.time.delayedCall(3000, () => {
+            this.time.delayedCall(300, () => {
                 if (this.player && this.player.active) this.player.clearTint();
             });
         }
@@ -739,7 +734,8 @@ export class GameScene extends Scene {
             this.endGame();
         }
     }
-    private playerHitByBullet(player: any, bullet: any) {
+
+    private playerHitByBullet(_player: any, bullet: any) {
         if (this.player.isInvincible) return;
 
         // Verifica se o player tem escudo ativo
@@ -788,10 +784,7 @@ export class GameScene extends Scene {
             callbackScope: this,
             loop: true
         });
-        
-        const percentReduction = ((this.baseSpawnDelay - this.currentSpawnDelay) / this.baseSpawnDelay * 100).toFixed(0);
-        console.log(`📈 Dificuldade aumentada! Spawn a cada ${this.currentSpawnDelay}ms (${percentReduction}% mais rápido)`);
-        
+
         // Feedback visual do aumento de dificuldade
         this.showDifficultyPopup();
     }
@@ -815,20 +808,8 @@ export class GameScene extends Scene {
     }
 
     private startBackgroundMusic() {
-        // Verifica se o som está disponível
-        if (!this.sound) {
-            console.warn('⚠️ Sistema de som não disponível');
-            return;
-        }
-        
-        // Para músicas anteriores se estiverem tocando
-        if (this.bgm) {
-            this.bgm.stop();
-        }
-        
-        // Toca a música em loop
+        if (!this.sound) return;
         this.audioManager.playMusic('bgm', 0.5, true);
-        console.log('🎵 Música de fundo iniciada');
     }
 
     private stopBackgroundMusic() {

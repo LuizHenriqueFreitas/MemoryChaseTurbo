@@ -18,8 +18,6 @@ export class ShieldItem extends Phaser.Physics.Arcade.Sprite {
         this.setScale(1);
         this.body!.setSize(28, 28);
         this.setTint(0x44ccff);
-        
-        console.log('🛡️ Shield item criado - movimento diagonal alternado');
     }
     
     update() {
@@ -50,7 +48,5 @@ export class ShieldItem extends Phaser.Physics.Arcade.Sprite {
             duration: 200,
             onComplete: () => spark.destroy()
         });
-        
-        console.log(`🛡️ Escudo mudou direção para: ${this.moveDirection === 1 ? 'DIREITA' : 'ESQUERDA'}`);
     }
 }

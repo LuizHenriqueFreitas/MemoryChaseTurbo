@@ -11,16 +11,6 @@ export class Coin extends Phaser.Physics.Arcade.Sprite {
         this.setScale(1.6);
         this.body!.setSize(18, 18);
         this.setVelocityY(this.speedY);
-        
-        // Garantia extra após 1 frame
-        scene.time.delayedCall(10, () => {
-            if (this.body) {
-                this.setVelocityY(this.speedY);
-                console.log(`Moeda velocidade após delay: ${this.body.velocity.y}`);
-            }
-        });
-        
-        console.log(`🪙 Coin spawn: pos=(${x}, ${y})`);
     }
 
     preUpdate(time: number, delta: number) {

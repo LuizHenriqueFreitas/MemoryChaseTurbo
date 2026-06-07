@@ -16,8 +16,6 @@ export class TimeWarpItem extends Phaser.Physics.Arcade.Sprite {
         this.setScale(1);
         this.body!.setSize(28, 28);
         this.setTint(0xff44ff); // Roxo/magenta para diferenciar
-        
-        console.log('⏰ TimeWarp item criado');
     }
     
     update() {

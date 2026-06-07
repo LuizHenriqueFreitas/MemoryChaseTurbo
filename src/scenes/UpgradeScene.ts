@@ -319,10 +319,7 @@ export class UpgradeScene extends Scene {
             return;
         }
         const cost = getTimeWarpUpgradeCost(level);
-        
-        // 🔴 DEBUG: Mostra informações no console
-        console.log(`TimeWarp - Nível: ${level}, Custo: ${cost}, Pontos: ${this.saveData.totalPoints}`);
-        
+
         if (this.saveData.totalPoints >= cost) {
             this.saveData.totalPoints -= cost;
             this.saveData.timeWarpLevel++;
@@ -335,7 +332,6 @@ export class UpgradeScene extends Scene {
                     this.container.y = 120 - currentScrollY;
                 }
             });
-            console.log(`✅ TimeWarp comprado! Novo nível: ${this.saveData.timeWarpLevel}`);
         } else {
             this.showMessage(`Pontos insuficientes! Necessário: ${cost} pontos`);
         }

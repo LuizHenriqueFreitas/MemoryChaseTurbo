@@ -14,7 +14,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     public isTimeWarpActive: boolean = false;
     public timeWarpEndTime: number = 0;
 
-    private dano: boolean = false;
     private audioManager!: AudioManager;
     private currentWeaponLevel: number = 0;
     private weaponCooldown: number = 0;
@@ -37,6 +36,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Sprites para diferentes estados
     private isDamaged: boolean = false;
+    private damageFrameActive: boolean = false;
 
     constructor(scene: Scene, x: number, y: number, maxHealth: number = 3, magnetLevel: number = 0, weaponLevel: number = 0) {
         super(scene, x, y, 'game_sprites', 0);
@@ -71,22 +71,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             };
             this.spaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         }
-
-        this.setupAnimations();
-    }
-
-    private setupAnimations() {
-        const texture = this.scene.textures.get('game_sprites');
-        if (texture && texture.frameTotal >= 3) {
-            console.log('✅ Player animations configuradas');
-        } else {
-            console.warn('⚠️ Spritesheet sem frames suficientes, usando fallback');
-        }
     }
 
     private updateAnimation() {
+        // Enquanto o sprite de dano está visível, não deixa o movimento sobrescrever o frame
+        if (this.damageFrameActive) return;
+
         const texture = this.scene.textures.get('game_sprites');
-        
+
         if (!texture || texture.frameTotal < 3) {
             this.updateAnimationFallback();
             return;
@@ -138,9 +130,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.shieldCircle) this.shieldCircle.destroy();
         this.shieldCircle = this.scene.add.circle(this.x, this.y, 32, 0x44ccff, 0.3);
         this.shieldCircle.setStrokeStyle(3, 0x44ccff);
-        
+
         this.audioManager.playSfx('powerUp', 0.8);
-        console.log(`🛡️ Escudo ativado por ${durationSeconds} segundos!`);
     }
     
     public updateShield() {
@@ -161,29 +152,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.shieldCircle.destroy();
             this.shieldCircle = null;
         }
-        console.log('🛡️ Escudo desativado!');
-    }
-    
-    public reflectEnemy(enemy: any) {
-        if (!this.hasShield) return false;
-        
-        const dx = enemy.x - this.x;
-        const dy = enemy.y - this.y;
-        const angle = Math.atan2(dy, dx);
-        const reflectForce = 500;
-        enemy.setVelocity(Math.cos(angle) * reflectForce, Math.sin(angle) * reflectForce);
-        
-        const spark = this.scene.add.circle(enemy.x, enemy.y, 10, 0x44ccff, 0.8);
-        this.scene.tweens.add({
-            targets: spark,
-            alpha: 0,
-            scaleX: 0.5,
-            scaleY: 0.5,
-            duration: 200,
-            onComplete: () => spark.destroy()
-        });
-        
-        return true;
     }
     
     public reflectBullet(bullet: any) {
@@ -209,7 +177,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.timeWarpEffect.strokeCircle(0, 0, 38);
         
         this.audioManager.playSfx('powerUp', 0.8);
-        console.log(`⏰ TimeWarp ativado por ${durationSeconds} segundos! (x5 pontos)`);
     }
     
     public updateTimeWarp() {
@@ -230,7 +197,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.timeWarpEffect.destroy();
             this.timeWarpEffect = null;
         }
-        console.log('⏰ TimeWarp desativado!');
     }
     
     public getScoreMultiplier(): number {
@@ -242,7 +208,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     public updateMagnetLevel(level: number) {
         this.magnetLevel = level;
         this.magnetRadius = this.baseMagnetRadius * (1 + 0.02 * level);
-        console.log(`🧲 Magnetismo atualizado: nível ${level}, raio ${this.magnetRadius}`);
     }
 
     public getMagnetLevel(): number {
@@ -258,23 +223,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.updateTimeWarp();
         this.handleMovement();
         this.handleShoot();
- 
-        if(this.dano == true){
-            // 🔴 MUDA PARA O FRAME DANIFICADO (frame 1)
-            this.setFrame(8);
-            
-            // Pisca branco
-            this.setTint(0xffffff);
-            
-            // Volta ao frame normal após 200ms
-            this.scene.time.delayedCall(10000, () => {
-                if (this.active) {
-                    this.setFrame(0); // Volta ao frame normal
-                    this.clearTint();
-                }
-            });
-            this.dano = false;
-        }
     }
 
     // ==================== MOVEMENT ====================
@@ -392,14 +340,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     public takeDamage() {
         if (this.isInvincible) return;
         if (this.hasShield) {
-            console.log('🛡️ Escudo absorveu o dano!');
             return;
         }
 
-        this.dano = true;
-        
         this.health = Math.max(0, this.health - 1);
-        
+
+        // Efeito visual imediato: sprite de dano (frame 8) + tint vermelho
+        this.showDamageFrame();
+        this.setTint(0xff8888);
+        this.scene.time.delayedCall(200, () => {
+            if (this.active) this.clearTint();
+        });
+
         // Som de dano
         this.audioManager.playSfx('hit', 0.7);
         
@@ -408,6 +360,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         } else {
             this.startInvincibility();
         }
+    }
+
+    // Mostra o sprite de dano (frame 8) por um curto período como feedback visual
+    private showDamageFrame(duration: number = 250) {
+        this.damageFrameActive = true;
+        this.setFrame(8);
+        this.scene.time.delayedCall(duration, () => {
+            if (this.active) {
+                this.damageFrameActive = false;
+                this.setFrame(0);
+            }
+        });
     }
 
     private startInvincibility() {

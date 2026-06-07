@@ -106,19 +106,13 @@ export function getTimeWarpDuration(level: number): number {
     return durations[level] || 0;
 }
 
-// 🔴 FUNÇÃO CORRIGIDA - TimeWarp Preço
 export function getTimeWarpUpgradeCost(currentLevel: number): number {
-    console.log(`getTimeWarpUpgradeCost chamado com nível: ${currentLevel}`);
-    
-    // Se já está no nível máximo (3), retorna -1
-    if (currentLevel >= 3) {
-        return -1;
-    }
-    
-    // Preços para cada nível
-    if (currentLevel === 0) return 15000;
-    if (currentLevel === 1) return 30000;
-    if (currentLevel === 2) return 60000;
-    
-    return -1;
+    if (currentLevel >= 3) return -1;
+
+    const prices: { [key: number]: number } = {
+        0: 15000,
+        1: 30000,
+        2: 60000
+    };
+    return prices[currentLevel] ?? -1;
 }

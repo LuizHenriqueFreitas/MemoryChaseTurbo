@@ -17,8 +17,6 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setVelocityY(speedY);
         this.setScale(0.7);
         this.body!.setSize(28, 28);
-        
-        console.log(`📦 ${textureKey} criado - velocidade Y: ${this.body?.velocity.y}`);
     }
     
     public abstract updateBehavior(player: Phaser.Physics.Arcade.Sprite): void;
@@ -33,7 +31,6 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Garante que a velocidade nunca seja zero durante o movimento
     protected ensureMovement() {
         if (this.body && this.body.velocity.y === 0 && this.active) {
-            console.warn(`⚠️ ${this.texture.key} estava parado, reiniciando velocidade`);
             this.setVelocityY(this.speedY);
         }
     }
