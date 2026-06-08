@@ -1,3 +1,17 @@
+<!--
+  ============================================================================
+   index.html — PÁGINA HOSPEDEIRA DO JOGO (PONTO DE ENTRADA WEB)
+  ============================================================================
+
+   Página HTML mínima que o navegador (e o Vite) carregam primeiro. Ela não
+   contém o jogo em si: apenas estiliza a página (fundo preto, jogo centralizado
+   e com uma borda branca) e importa o script principal `src/main.ts`, que cria
+   o jogo Phaser. O Phaser, por sua vez, injeta o <canvas> onde tudo é desenhado.
+
+   O atributo type="module" habilita os imports ES e permite que o Vite faça o
+   bundling do TypeScript em tempo de desenvolvimento e build.
+  ============================================================================
+-->
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

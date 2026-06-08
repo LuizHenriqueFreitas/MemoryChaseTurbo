@@ -1,3 +1,25 @@
+/**
+ * ============================================================================
+ *  MenuScene.ts — MENU PRINCIPAL
+ * ============================================================================
+ *
+ *  A "porta de entrada" do jogador. A partir daqui ele pode: iniciar o jogo,
+ *  escolher a arma, abrir a loja de upgrades, ver conteúdo Extra (arte e
+ *  história) e ajustar opções (som e limpar save). Também exibe a "carteira"
+ *  (pontos totais acumulados).
+ *
+ *  Esta cena é majoritariamente construção de INTERFACE (UI). O padrão se
+ *  repete bastante: cria-se um texto com `add.text(...)`, marca-se como
+ *  interativo com `.setInteractive()` e registram-se eventos de mouse:
+ *    • 'pointerdown' → clique (executa a ação);
+ *    • 'pointerover'/'pointerout' → entra/sai com o mouse (efeito de destaque).
+ *
+ *  Os "modais" (Extra, Opções, confirmações) são construídos como CONTAINERS
+ *  do Phaser — um container agrupa vários objetos e permite mostrar/esconder
+ *  ou destruir todos de uma vez.
+ * ============================================================================
+ */
+
 import { Scene } from 'phaser';
 import { CONFIG } from '../utils/constants';
 import { loadSave } from '../utils/SaveData';
@@ -14,9 +36,15 @@ export class MenuScene extends Scene {
         super('MenuScene');
     }
 
+    /**
+     * Monta toda a tela do menu: título, instruções, botões principais
+     * (Iniciar, Armamento, Upgrades), botões de canto (Extra, Opções) e a
+     * carteira. Também reseta o teclado para evitar "teclas presas" ao voltar
+     * de outra cena.
+     */
     create() {
         this.saveData = loadSave();
-        
+
         // Inicializa o gerenciador de áudio
         this.audioManager = new AudioManager(this);
         
@@ -140,6 +168,12 @@ export class MenuScene extends Scene {
         this.createExtraModal();
     }
 
+    /**
+     * Pré-constrói o modal "Extra" (começa invisível). Contém um overlay
+     * escurecedor clicável (fecha ao clicar fora), um fundo, e três botões:
+     * Arte Conceitual, Sobre o Jogo e Fechar. Por ser feito uma única vez,
+     * apenas o alternamos com setVisible() depois.
+     */
     private createExtraModal() {
         // Container principal do modal
         this.extraModal = this.add.container(0, 0);
@@ -222,14 +256,20 @@ export class MenuScene extends Scene {
         this.extraModal.add(closeBtn);
     }
 
+    /** Mostra o modal Extra. */
     private showExtraModal() {
         this.extraModal.setVisible(true);
     }
 
+    /** Esconde o modal Extra. */
     private hideExtraModal() {
         this.extraModal.setVisible(false);
     }
 
+    /**
+     * Abre a tela de Arte Conceitual: cria um container TEMPORÁRIO (destruído
+     * ao fechar) exibindo a imagem 'concept_art' carregada na BootScene.
+     */
     private showConceptArt() {
         // Container da arte conceitual
         const artContainer = this.add.container(0, 0);
@@ -279,6 +319,11 @@ export class MenuScene extends Scene {
         artContainer.add(backBtn);
     }
 
+    /**
+     * Abre a tela "Sobre o Jogo": exibe a história (a especulação econômica em
+     * torno da memória RAM com a explosão da IA) e os créditos do desenvolvedor.
+     * Também é um container temporário, descartado ao fechar.
+     */
     private showAboutGame() {
         // Container do sobre
         const aboutContainer = this.add.container(0, 0);
@@ -345,6 +390,12 @@ export class MenuScene extends Scene {
         aboutContainer.add(backBtn);
     }
 
+    /**
+     * Abre o modal de Opções (Configurações). Permite alternar Efeitos
+     * Sonoros e Música (lendo/gravando o estado via AudioManager) e acessar a
+     * limpeza de save. Os botões LIGADO/DESLIGADO refletem e atualizam o estado
+     * de mudo em tempo real.
+     */
     private showOptionsModal() {
         // Fecha modal anterior se existir
         if (this.optionsModalContainer) {
@@ -460,6 +511,7 @@ export class MenuScene extends Scene {
         closeBtn.on('pointerdown', () => this.closeOptionsModal());
     }
 
+    /** Fecha e destrói o modal de Opções, se aberto. */
     private closeOptionsModal() {
         if (this.optionsModalContainer) {
             this.optionsModalContainer.destroy();
@@ -467,6 +519,12 @@ export class MenuScene extends Scene {
         }
     }
 
+    /**
+     * Diálogo de CONFIRMAÇÃO antes de apagar o save (ação destrutiva). Se o
+     * jogador confirmar (SIM), removemos as chaves do localStorage, recarregamos
+     * o save (volta ao padrão) e atualizamos a carteira na tela. Em ambos os
+     * casos, o modal de opções é reaberto ao final.
+     */
     private showClearSaveConfirm() {
         // Fecha o modal de opções temporariamente
         this.closeOptionsModal();

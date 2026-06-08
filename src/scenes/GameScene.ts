@@ -1,3 +1,29 @@
+/**
+ * ============================================================================
+ *  GameScene.ts — CENA DE GAMEPLAY (O CORAÇÃO DO JOGO)
+ * ============================================================================
+ *
+ *  É aqui que a partida acontece. Esta cena é a mais complexa do projeto e
+ *  amarra TODAS as outras peças: jogador, inimigos, moedas, power-ups, balas,
+ *  física, colisões, HUD, dificuldade progressiva, pontuação e fim de jogo.
+ *
+ *  Como o Phaser organiza uma cena (ciclo de vida usado aqui):
+ *    • init()    → reseta o estado ANTES de tudo (importante ao reiniciar).
+ *    • create()  → monta o mundo uma vez: cria entidades, grupos, colisões,
+ *                  HUD, temporizadores (spawns, dificuldade) e música.
+ *    • update()  → roda ~60x/s: move/atualiza tudo, aplica magnetismo, guia as
+ *                  balas teleguiadas, limpa objetos fora da tela.
+ *    • shutdown()→ limpeza ao sair da cena (para timers e música).
+ *
+ *  Conceitos centrais:
+ *    • GRUPOS de física: coleções (inimigos, moedas, balas...) que o motor
+ *      gerencia em bloco e usa para detectar colisões eficientemente.
+ *    • OVERLAP vs COLLIDER: overlap só DETECTA a sobreposição (coleta de itens);
+ *      collider detecta E resolve fisicamente (empurra/bloqueia).
+ *    • PAREDES LATERAIS estáticas que ninguém atravessa nem destrói.
+ * ============================================================================
+ */
+
 import { Scene } from 'phaser';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemies/Enemy';
@@ -46,6 +72,10 @@ export class GameScene extends Scene {
         super('GameScene');
     }
 
+    /**
+     * Roda antes de create(), inclusive em cada reinício. Zera o teclado e as
+     * variáveis de estado para que uma partida nova não herde lixo da anterior.
+     */
     init() {
         // Limpa o teclado ao (re)iniciar a cena
         if (this.input && this.input.keyboard) {
@@ -59,6 +89,12 @@ export class GameScene extends Scene {
         this.score = 0;
     }
     
+    /**
+     * Monta o mundo da partida. Em ordem: fundo, áudio/save, jogador (já com os
+     * upgrades aplicados), grupos de física, paredes, regras de coleta (overlap)
+     * e de colisão (collider), HUD (score/vidas/timer/barras de poder), os
+     * temporizadores de spawn e de aumento de dificuldade, e a música.
+     */
     create() {
         // ========== FUNDO ==========
         if (this.textures.exists('background')) {
@@ -195,6 +231,24 @@ export class GameScene extends Scene {
         this.startBackgroundMusic();
     }
 
+    /**
+     * Cria as PAREDES LATERAIS invisíveis, sólidas e indestrutíveis nas bordas
+     * esquerda e direita. São corpos ESTÁTICOS (o `true` em `physics.add.existing`)
+     * — nunca se movem nem são destruídos.
+     *
+     * Truque de posicionamento: cada parede é centrada FORA da tela (em
+     * -espessura/2 e WIDTH+espessura/2), de modo que sua FACE INTERNA caia
+     * exatamente em x=0 e x=WIDTH. A espessura (64px) é grande para evitar que
+     * corpos muito rápidos "atravessem" entre dois frames (efeito túnel).
+     *
+     * Regras de colisão associadas:
+     *   • Player: simplesmente é barrado.
+     *   • ChaserEnemy: EXPLODE ao bater na parede.
+     *   • Balas (player e inimigos): a BALA é destruída (e explode, se for
+     *     explosiva). Como o 2º alvo do collider é um array, a ordem dos
+     *     argumentos não é garantida — por isso identificamos a bala como
+     *     "aquilo que não é parede".
+     */
     private createSideWalls() {
         // Paredes laterais INVISÍVEIS, com a face interna exatamente no limite da janela
         // (x = 0 e x = CONFIG.WIDTH). Sólidas, intransponíveis e indestrutíveis.
@@ -236,7 +290,12 @@ export class GameScene extends Scene {
         this.physics.add.collider(this.enemyBullets, walls, onBulletHitsWall, undefined, this);
     }
 
-    // Detona a explosão da bala (arma padrão) no ponto de impacto, se ela for explosiva.
+    /**
+     * Detona a explosão da bala (arma padrão) no ponto de impacto, se ela for
+     * explosiva — usado quando a bala bate numa parede. Lê o raio configurado
+     * pela arma e dispara o efeito visual + a onda de choque que empurra os
+     * objetos próximos.
+     */
     private explodeBulletIfNeeded(bullet: any) {
         if (!bullet.getData || !bullet.getData('explosive')) return;
         const radius = bullet.getData('explosionRadius') || 35;
@@ -245,6 +304,7 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('explosion', 0.5);
     }
 
+    /** Monta o menu de pausa (oculto por padrão): Continuar e Menu Principal. */
     private createPauseMenu() {
         this.pauseMenu = this.add.container(400, 300);
         this.pauseMenu.setVisible(false);
@@ -264,6 +324,10 @@ export class GameScene extends Scene {
         this.pauseMenu.add([bg, title, continueBtn, menuBtn]);
     }
 
+    /**
+     * Alterna pausa. Pausar CONGELA a física (`physics.pause()`), mostra o menu
+     * e pausa a música; retomar faz o inverso. Não pausa se o jogo já acabou.
+     */
     private togglePause() {
         if (this.gameOver) return;
         this.isPaused = !this.isPaused;
@@ -278,6 +342,16 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * LOOP PRINCIPAL — executado a cada frame (~60x/s). Responsável por:
+     *   1. Checar a tecla ESC (pausa).
+     *   2. Atualizar o jogador; se ele sumir/morrer, encerrar o jogo.
+     *   3. Atualizar as barras de poder (escudo / espaço-tempo) na HUD.
+     *   4. MAGNETISMO: puxar moedas que entrarem no raio de atração.
+     *   5. Pedir a cada inimigo que execute seu comportamento (updateBehavior).
+     *   6. BALAS TELEGUIADAS: curvar sua trajetória rumo ao inimigo mais próximo.
+     *   7. LIMPEZA: destruir objetos que saíram da tela (evita vazamento).
+     */
     update() {
         if (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey)) {
             this.togglePause();
@@ -327,7 +401,10 @@ export class GameScene extends Scene {
             }
         });
         
-        // Magnetismo: puxa moedas
+        // Magnetismo: para cada moeda dentro do raio de atração do jogador,
+        // calculamos o ângulo da moeda até o jogador (atan2) e aplicamos uma
+        // velocidade nessa direção, "puxando-a". O `dist > 5` evita tremor
+        // quando a moeda já está praticamente em cima do jogador.
         this.coins.getChildren().forEach((coin: any) => {
             if (!coin.active) return;
             const dx = this.player.x - coin.x;
@@ -364,7 +441,12 @@ export class GameScene extends Scene {
             if (item && item.update) item.update();
         });
 
-        // Atualiza balas com homing (perseguição)
+        // BALAS TELEGUIADAS (homing) — só as marcadas com 'homing' (arma magnética).
+        // Para cada uma: (a) procura o inimigo mais próximo dentro de um raio de
+        // 200px; (b) calcula a direção até ele; (c) AJUSTA a velocidade de forma
+        // GRADUAL (interpolação de 5% por frame), não instantânea — isso produz
+        // uma curva suave de perseguição, em vez de a bala "grudar" no alvo.
+        // Por fim, rotaciona o sprite para apontar no sentido do movimento.
         this.player.bullets.getChildren().forEach((bullet: any) => {
             if (bullet.getData('homing')) {
                 // Encontra o inimigo mais próximo
@@ -404,7 +486,9 @@ export class GameScene extends Scene {
             }
         });
 
-        // Limpeza de objetos fora da tela
+        // Limpeza de objetos fora da tela: objetos que passaram das bordas
+        // viram "lixo" invisível que continuaria consumindo memória/CPU. Aqui
+        // os destruímos assim que cruzam os limites visíveis.
         this.enemies.getChildren().forEach((obj: any) => { if (obj.y > 650 || obj.y < -100) obj.destroy(); });
         this.coins.getChildren().forEach((obj: any) => { if (obj.y > 650) obj.destroy(); });
         this.enemyBullets.getChildren().forEach((obj: any) => { if (obj.y > 650 || obj.y < -50) obj.destroy(); });
@@ -415,6 +499,11 @@ export class GameScene extends Scene {
         this.timeWarpItems.getChildren().forEach((obj: any) => { if (obj && obj.y > 650) obj.destroy(); });
     }
 
+    /**
+     * Faz surgir um inimigo no topo, em posição X aleatória. O TIPO é sorteado
+     * (0=Walker, 1=Shooter, 2=Chaser). A cada inimigo gerado, também tentamos
+     * (por sorteio de chance) gerar itens de Espaço-Tempo e Escudo.
+     */
     private spawnEnemy() {
         if (this.gameOver) return;
 
@@ -433,6 +522,7 @@ export class GameScene extends Scene {
         this.trySpawnShieldItem();
     }
     
+    /** Faz surgir uma moeda no topo, em X aleatório. */
     private spawnCoin() {
         if (this.gameOver) return;
         const x = Phaser.Math.Between(40, 760);
@@ -440,6 +530,11 @@ export class GameScene extends Scene {
         this.coins.add(coin);
     }
 
+    /**
+     * Tenta gerar um item de Escudo, conforme a CHANCE definida pelo nível do
+     * upgrade. Sorteia um número de 0 a 100 e só cria o item se ele cair abaixo
+     * da chance. Se o nível for 0 (chance 0), nem tenta.
+     */
     private trySpawnShieldItem() {
         const shieldLevel = this.saveData.shieldLevel || 0;
         const chance = getShieldSpawnChance(shieldLevel);
@@ -467,6 +562,7 @@ export class GameScene extends Scene {
         }
     }
 
+    /** Tenta gerar um item de Espaço-Tempo (mesma lógica de chance do escudo). */
     private trySpawnTimeWarpItem() {
         const level = this.saveData.timeWarpLevel || 0;
         const chance = getTimeWarpSpawnChance(level);
@@ -480,6 +576,11 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * Coleta do item de Escudo (disparada pelo overlap player↔item). Remove o
+     * item, ativa o escudo com a duração do nível atual e mostra feedback
+     * visual/sonoro.
+     */
     private collectShield(_player: any, item: any) {
         item.destroy();
         
@@ -502,6 +603,7 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('powerup', 0.8);
     }
 
+    /** Coleta do item de Espaço-Tempo: ativa o multiplicador x5 pela duração do nível. */
     private collectTimeWarp(_player: any, item: any) {
         item.destroy();
         const level = this.saveData.timeWarpLevel || 0;
@@ -511,9 +613,20 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('powerup', 0.8);
     }
 
+    /**
+     * BALA DO JOGADOR ACERTA UM INIMIGO (collider). Calcula a pontuação (com o
+     * multiplicador do Espaço-Tempo), destrói a bala e resolve o inimigo:
+     *   • ChaserEnemy: SEMPRE explode (efeito grande) — ele é "frágil" a tiros.
+     *   • Demais: se a bala era explosiva, gera explosão em área; senão, só uma
+     *     fagulha de impacto. O inimigo então morre.
+     * Em todos os casos, soma os pontos e mostra a pontuação flutuante.
+     *
+     * Detalhe: lemos os dados da bala (explosiva? raio?) ANTES de destruí-la,
+     * pois depois de `destroy()` esses dados não estariam mais disponíveis.
+     */
     private hitEnemy(bullet: any, enemy: any) {
         if (!bullet.active || !enemy.active) return;
-        
+
         const multiplier = this.player.getScoreMultiplier();
         const baseScore = 20;
         const finalScore = baseScore * multiplier;
@@ -568,9 +681,17 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('explosion', 0.6);
     }
 
+    /**
+     * COLISÃO ENTRE DOIS INIMIGOS (collider enemies↔enemies).
+     *   • Se qualquer um for um Chaser, ele explode.
+     *   • Inimigos normais apenas RICOCHETEIAM: calculamos o eixo de impacto
+     *     (ângulo entre os dois) e os empurramos em sentidos opostos, somando a
+     *     força à velocidade atual — um "pega-empurra" que evita que fiquem
+     *     grudados/sobrepostos.
+     */
     private enemyCollision(enemy1: any, enemy2: any) {
         if (!enemy1.active || !enemy2.active) return;
-        
+
         const impactX = (enemy1.x + enemy2.x) / 2;
         const impactY = (enemy1.y + enemy2.y) / 2;
         
@@ -613,6 +734,7 @@ export class GameScene extends Scene {
         }
     }
 
+    /** Coleta de moeda (overlap): soma 10 pontos × multiplicador e dá feedback. */
     private collectCoin(_player: any, coin: any) {
         coin.destroy();
         const multiplier = this.player.getScoreMultiplier();
@@ -623,6 +745,11 @@ export class GameScene extends Scene {
         this.audioManager.playSfx('coin', 0.5);
     }
 
+    /**
+     * Mostra um "+pontos" flutuante que sobe e desaparece no ponto informado —
+     * o feedback visual clássico de pontuação. A cor varia para sinalizar
+     * bônus (ex.: magenta durante o Espaço-Tempo).
+     */
     private showFloatingScore(x: number, y: number, value: number, color: string = '#ffd966') {
         const text = this.add.text(x, y, `+${value}`, {
             fontSize: '24px',
@@ -642,6 +769,21 @@ export class GameScene extends Scene {
         });
     }
 
+    /**
+     * JOGADOR COLIDE COM UM INIMIGO (corpo a corpo). Trata dois casos:
+     *
+     *   • CHASER: se o jogador tem escudo, o chaser explode contra ele sem
+     *     causar dano; caso contrário, o jogador toma dano e é ARREMESSADO na
+     *     direção oposta ao chaser, que então explode.
+     *
+     *   • WALKER/SHOOTER: aplica dano (respeitando invencibilidade), e há um
+     *     "ricochete" mútuo — jogador e inimigo são empurrados em sentidos
+     *     opostos, com a força crescendo conforme a velocidade do jogador no
+     *     impacto (limitada a 500). O inimigo é então MARCADO para morrer em 4s
+     *     (`markedForDeath`), o que evita dano repetido enquanto ele se afasta.
+     *
+     * Em qualquer caso, se a vida chegar a 0, o jogo termina (endGame()).
+     */
     private playerHit(player: any, enemy: any) {
         // CHASER: explode ao colidir com o player
         if (enemy instanceof ChaserEnemy) {
@@ -735,6 +877,11 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * JOGADOR ATINGIDO POR BALA INIMIGA. Se estiver com escudo, a bala é
+     * REFLETIDA (volta para os inimigos) em vez de causar dano. Caso contrário,
+     * a bala é destruída, o jogador toma dano e o jogo pode terminar.
+     */
     private playerHitByBullet(_player: any, bullet: any) {
         if (this.player.isInvincible) return;
 
@@ -756,6 +903,7 @@ export class GameScene extends Scene {
         }
     }
 
+    /** Incrementa o cronômetro (1x/s) e atualiza a HUD no formato MM:SS. */
     private updateGameTimer() {
         if (this.gameOver || this.isPaused) return;
         this.gameTimer++;
@@ -766,9 +914,16 @@ export class GameScene extends Scene {
         this.timerText.setText(timeString);
     }
 
+    /**
+     * DIFICULDADE PROGRESSIVA — chamada periodicamente (a cada 60s). Reduz em
+     * 5% o intervalo entre spawns de inimigos (mais inimigos por segundo),
+     * respeitando um piso de 400ms para o jogo não ficar impossível. Como o
+     * Phaser não permite "editar" um timer em andamento, removemos o timer
+     * antigo e criamos um novo com o delay reduzido.
+     */
     private increaseDifficulty() {
         if (this.gameOver) return;
-        
+
         // Aumenta a quantidade de inimigos em 5%
         const reduction = this.currentSpawnDelay * 0.05;  // reduz 5% do delay
         this.currentSpawnDelay = Math.max(400, this.currentSpawnDelay - reduction);
@@ -789,6 +944,7 @@ export class GameScene extends Scene {
         this.showDifficultyPopup();
     }
 
+    /** Aviso visual temporário de que a dificuldade aumentou. */
     private showDifficultyPopup() {
         const popup = this.add.text(400, 300, '⚡ DIFICULDADE AUMENTADA! ⚡', {
             fontSize: '28px',
@@ -807,6 +963,7 @@ export class GameScene extends Scene {
         });
     }
 
+    // ---- Atalhos de música: delegam ao AudioManager (centralizador do áudio) ----
     private startBackgroundMusic() {
         if (!this.sound) return;
         this.audioManager.playMusic('bgm', 0.5, true);
@@ -824,6 +981,11 @@ export class GameScene extends Scene {
         this.audioManager.resumeMusic();
     }
 
+    /**
+     * Chamado automaticamente pelo Phaser ao SAIR desta cena. Faz a limpeza:
+     * para a música, remove listeners do teclado e cancela todos os timers,
+     * evitando que callbacks "fantasma" rodem após a cena ter sido encerrada.
+     */
     shutdown() {
         this.stopBackgroundMusic();
         // Limpeza ao destruir a cena
@@ -836,9 +998,18 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * FIM DE JOGO. Sequência: marca gameOver, para a música, faz a explosão
+     * final do jogador, congela a física, cancela timers e destrói a nave.
+     *
+     * Persistência: a pontuação da partida é SOMADA à carteira global
+     * (totalPoints) e gravada no save — é assim que o jogador "fatura" pontos
+     * para gastar na loja. Por fim, monta a tela de Game Over com os botões
+     * Jogar Novamente (reinicia a cena) e Menu Principal.
+     */
     private endGame() {
         if (this.gameOver) return;
-        
+
         this.gameOver = true;
 
         this.stopBackgroundMusic();

@@ -1,3 +1,18 @@
+/**
+ * ============================================================================
+ *  WeaponSelectScene.ts — TELA DE SELEÇÃO DE ARMA
+ * ============================================================================
+ *
+ *  Permite escolher qual das armas do WeaponSystem o jogador levará para a
+ *  partida. A escolha é gravada em `weaponLevel` no save, então persiste entre
+ *  sessões e é lida pelo Player ao iniciar o jogo.
+ *
+ *  Para cada arma do catálogo, monta-se um "card" com nome, descrição, uma
+ *  prévia animada do projétil e um botão Equipar. O card da arma atualmente
+ *  equipada aparece destacado (verde) e com o botão desativado.
+ * ============================================================================
+ */
+
 import { Scene } from 'phaser';
 import { CONFIG } from '../utils/constants';
 import { WeaponSystem } from '../utils/WeaponSystem';
@@ -5,12 +20,13 @@ import { loadSave, saveSave } from '../utils/SaveData';
 
 export class WeaponSelectScene extends Scene {
     private saveData: any;
-    private selectedWeapon: number = 0;
+    private selectedWeapon: number = 0;  // Índice da arma atualmente equipada
 
     constructor() {
         super('WeaponSelectScene');
     }
 
+    /** Monta o fundo estrelado, o título, os cards de arma e o botão Voltar. */
     create() {
         this.saveData = loadSave();
         this.selectedWeapon = this.saveData.weaponLevel || 0;
@@ -48,6 +64,17 @@ export class WeaponSelectScene extends Scene {
         backBtn.on('pointerout', () => backBtn.setColor('#ffffff'));
     }
 
+    /**
+     * Gera um card para cada arma do catálogo (WeaponSystem.WEAPONS).
+     *
+     * Pontos de interesse:
+     *   • `isSelected` controla o destaque visual (cor da borda/fundo, seta
+     *     indicadora e o texto "✓ EQUIPADO" no botão).
+     *   • A prévia do projétil (círculo + ícone) recebe um tween em loop
+     *     infinito (`repeat: -1`, `yoyo: true`) para "pulsar" continuamente.
+     *   • Ao Equipar, gravamos o índice em `weaponLevel` e damos `scene.restart()`
+     *     para redesenhar a tela com o novo destaque.
+     */
     private createWeaponCards() {
         const startY = 90;
         const spacing = 125;

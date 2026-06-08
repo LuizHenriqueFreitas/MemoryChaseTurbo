@@ -1,7 +1,26 @@
+/**
+ * ============================================================================
+ *  UpgradeScene.ts — LOJA DE UPGRADES
+ * ============================================================================
+ *
+ *  Onde o jogador GASTA os pontos acumulados (totalPoints) para comprar
+ *  melhorias permanentes: vidas extras, campo magnético, escudo e Espaço-Tempo.
+ *  Os custos e benefícios vêm todos das funções de SaveData.ts (a "economia").
+ *
+ *  Destaques de implementação:
+ *    • SCROLL próprio: os cards ficam num container que pode ser rolado tanto
+ *      pela roda do mouse quanto por arraste (drag), pois podem ultrapassar a
+ *      altura da tela.
+ *    • Compra → grava o save e dá `scene.restart()` para redesenhar preços e
+ *      níveis. Um pequeno truque restaura a posição do scroll após o restart,
+ *      para o jogador não "voltar ao topo" a cada compra.
+ * ============================================================================
+ */
+
 import { Scene } from 'phaser';
 import { CONFIG } from '../utils/constants';
-import { 
-    loadSave, 
+import {
+    loadSave,
     saveSave, 
     getHealthUpgradeCost, 
     getMagnetUpgradeCost, 
@@ -27,6 +46,11 @@ export class UpgradeScene extends Scene {
         super('UpgradeScene');
     }
 
+    /**
+     * Monta a loja: fundo estrelado, título, carteira, os cards de upgrade
+     * dentro de um container rolável, e configura os controles de scroll
+     * (roda do mouse + arraste) e o botão Voltar.
+     */
     create() {
         this.saveData = loadSave();
 
@@ -57,7 +81,10 @@ export class UpgradeScene extends Scene {
         // Criar todos os cards
         this.createUpgradeCards();
         
-        // Configurar scroll com mouse wheel
+        // Configurar scroll com mouse wheel.
+        // `scrollY` é limitado ao intervalo [0, maxScroll] com Math.max/min
+        // (técnica de "clamp"), e a posição do container é ajustada a partir
+        // dele. 120 é o deslocamento inicial (espaço para título/carteira).
         this.input.on('wheel', (pointer: any, gameObjects: any, deltaX: number, deltaY: number) => {
             this.scrollY += deltaY * 0.5;
             this.scrollY = Math.max(0, Math.min(this.scrollY, this.maxScroll));
@@ -95,6 +122,12 @@ export class UpgradeScene extends Scene {
         backBtn.on('pointerdown', () => this.scene.start('MenuScene'));
     }
 
+    /**
+     * Cria os quatro cards de upgrade, empilhados verticalmente. Cada card
+     * consulta o nível atual no save e as funções de custo/benefício de
+     * SaveData.ts. Ao final, calcula a altura total e o `maxScroll` (o quanto
+     * dá para rolar) com base no conteúdo que excede a área visível.
+     */
     private createUpgradeCards() {
         let currentY = 0;
         const spacing = 120; // ← REDUZIDO de 150 para 120 (gap menor)
@@ -154,12 +187,22 @@ export class UpgradeScene extends Scene {
         this.maxScroll = Math.max(0, this.container.height - (CONFIG.HEIGHT - 180));
     }
 
+    /**
+     * Fábrica genérica de um card de upgrade. Recebe o conteúdo (título, nível,
+     * descrição, preço) e um callback `onBuy` executado ao clicar em COMPRAR.
+     *
+     * Lógica de estado do botão:
+     *   • price === -1  → nível MÁXIMO: mostra "MAXIMIZADO" (sem botão).
+     *   • pode pagar    → botão verde e clicável.
+     *   • não pode pagar→ botão acinzentado e desativado.
+     * `canAfford` cruza o preço com a carteira para decidir isso.
+     */
     private createUpgradeCard(
-        y: number, 
-        title: string, 
-        levelText: string, 
-        description: string, 
-        price: number, 
+        y: number,
+        title: string,
+        levelText: string,
+        description: string,
+        price: number,
         onBuy: () => void
     ) {
         const cardWidth = 520;
@@ -232,6 +275,7 @@ export class UpgradeScene extends Scene {
         }
     }
 
+    /** Exibe uma mensagem temporária (ex.: "Pontos insuficientes!") por 2s. */
     private showMessage(msg: string) {
         const message = this.add.text(CONFIG.WIDTH / 2, CONFIG.HEIGHT - 80, msg, { 
             fontSize: '24px', 
@@ -242,6 +286,14 @@ export class UpgradeScene extends Scene {
         this.time.delayedCall(2000, () => message.destroy());
     }
 
+    /**
+     * Compra de "vidas extras". É o MODELO seguido pelas demais compras:
+     *   1. Bloqueia se já estiver no nível máximo.
+     *   2. Verifica se há pontos suficientes; senão, avisa.
+     *   3. Debita o custo, incrementa o nível e SALVA.
+     *   4. Reinicia a cena para redesenhar, restaurando a posição do scroll
+     *      logo depois (delayedCall de 50ms), para a experiência não "saltar".
+     */
     private buyHealthUpgrade() {
         const level = this.saveData.healthUpgradeLevel;
         if (level >= 5) {
@@ -268,6 +320,7 @@ export class UpgradeScene extends Scene {
         }
     }
 
+    /** Compra do campo magnético (mesmo fluxo de buyHealthUpgrade). */
     private buyMagnetUpgrade() {
         const level = this.saveData.magnetLevel;
         const cost = getMagnetUpgradeCost(level);
@@ -288,6 +341,7 @@ export class UpgradeScene extends Scene {
         }
     }
 
+    /** Compra do escudo (mesmo fluxo, com teto no nível 3). */
     private buyShieldUpgrade() {
         const level = this.saveData.shieldLevel;
         if (level >= 3) {
@@ -312,6 +366,7 @@ export class UpgradeScene extends Scene {
         }
     }
 
+    /** Compra do Espaço-Tempo (mesmo fluxo, com teto no nível 3). */
     private buyTimeWarpUpgrade() {
         const level = this.saveData.timeWarpLevel;
         if (level >= 3) {
